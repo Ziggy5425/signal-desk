@@ -1,0 +1,4 @@
+# Seller (earn side) — pure Python, no npm, no stripe SDK (raw HTTP). Pin + vet.
+fastapi==0.115.6
+uvicorn==0.34.0
+httpx==0.28.1   # FastAPI TestClient (buyer_sim) + any HTTP client needs
