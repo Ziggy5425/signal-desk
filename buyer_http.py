@@ -63,7 +63,8 @@ if code == 200:
            "paid_cents": body.get("paid_cents")}
     if PREMIUM:
         out.update({"creator": body.get("creator"),
-                    "creator_payout": body.get("spend_mode"),
+                    "payout_cents": body.get("creator_payout_cents"),
+                    "payout_mode": body.get("spend_mode"),
                     "auto_payout_left_cents": body.get("budget_remaining_cents"),
                     "reasoning_tier": body.get("reasoning_tier"),
                     "rationale": body.get("rationale")})
@@ -72,7 +73,8 @@ if code == 200:
         brain = ("paid NVIDIA Nemotron 550B (hard call)"
                  if body.get("reasoning_tier") == "nemotron-550b" else "free local read")
         print(f"[4] earned ${body.get('paid_cents', 0) / 100:.2f} · paid creator "
-              f"{body.get('creator')} {body.get('spend_mode')} · reasoning: {brain} · "
-              f"auto-payout left ${body.get('budget_remaining_cents', 0) / 100:.2f}")
+              f"{body.get('creator')} ${body.get('creator_payout_cents', 0) / 100:.2f} "
+              f"{body.get('spend_mode')} · reasoning: {brain} · "
+              f"allowance left ${body.get('budget_remaining_cents', 0) / 100:.2f}")
 else:
     print(json.dumps(body, indent=2))

@@ -88,6 +88,7 @@ async def get_signal(ticker: str, request: Request, premium: bool = False):
             tag = "auto" if mode == "autonomous" else "W-9 review · approved"
             ledger.record("spend", CREATOR_PAYOUT, memo=f"creator-payout:{creator} ({tag})")
         body["spend_mode"] = mode
+        body["creator_payout_cents"] = CREATOR_PAYOUT if ok else 0
         body["payout_remaining_cents"] = payments.budget_remaining()
         body["budget_remaining_cents"] = payments.budget_remaining()  # buyer-script compat
 
