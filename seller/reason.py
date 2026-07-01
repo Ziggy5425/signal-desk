@@ -15,9 +15,13 @@ MODEL = os.environ.get("NEMOTRON_MODEL", "nvidia/nemotron-3-ultra-550b-a55b")
 KEY = os.environ.get("NVIDIA_API_KEY", "")
 
 
-def rationale(sig: dict, timeout: float = 20) -> str:
+def rationale(sig: dict, timeout: float = 12, attempts: int = 3) -> str:
+    """One educational sentence from Nemotron 550B. Retries a few times because the free
+    tier can 503 under rapid calls; returns "" only after all attempts fail, so a busy
+    model never blocks (or fakes) a sale."""
     if not KEY or "xxx" in KEY:
         return ""
+    import time
     s = sig.get("signal", {})
     prompt = (
         "You are an educational markets analyst. In ONE concise, descriptive sentence, "
@@ -32,13 +36,20 @@ def rationale(sig: dict, timeout: float = 20) -> str:
         "temperature": 0.3,
         "chat_template_kwargs": {"enable_thinking": False},
     }
-    req = urllib.request.Request(BASE.rstrip("/") + "/chat/completions",
-                                 data=json.dumps(payload).encode(), method="POST")
-    req.add_header("Authorization", "Bearer " + KEY)
-    req.add_header("Content-Type", "application/json")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            d = json.loads(r.read().decode())
-        return (d["choices"][0]["message"].get("content") or "").strip()
-    except Exception:
-        return ""
+    data = json.dumps(payload).encode()
+    for i in range(attempts):
+        try:
+            req = urllib.request.Request(BASE.rstrip("/") + "/chat/completions",
+                                         data=data, method="POST")
+            req.add_header("Authorization", "Bearer " + KEY)
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                d = json.loads(r.read().decode())
+            content = (d["choices"][0]["message"].get("content") or "").strip()
+            if content:
+                return content
+        except Exception:
+            pass
+        if i < attempts - 1:
+            time.sleep(1.5)
+    return ""
