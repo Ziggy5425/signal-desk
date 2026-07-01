@@ -14,8 +14,10 @@ SELLER (earn):
           confirm=true            (Stripe-Version: 2026-04-22.preview)
      status=succeeded -> release the signal.   (PROVEN live 2026-06-28.)
 
-SPENDER (cost beat): pay a data vendor via the Stripe Link CLI; operator approves
-in the Link app (the safety money-shot). npm CLI runs inside the NemoClaw sandbox.
+PAYOUT (creator rev-share): release a creator's cut via the Stripe Link CLI; the operator
+approves in the Link app when a payout would cross the IRS $600 / W-9 reporting line (the
+safety money-shot). Production uses a Stripe Connect transfer; test mode models the money
+movement with test credentials — no real funds move.
 
 Dev mode (STRIPE_SKILLS_DEV=1): honor a stubbed `X-Payment-Token: test-paid` so the
 loop runs without Stripe. Charge path uses raw HTTP (stripe_http) — the proven path.
@@ -37,11 +39,15 @@ def _link_cli_bin() -> str:
 
 LINK_CLI = _link_cli_bin()
 
-# Human-authorized AUTONOMOUS data budget (cents). The agent spends within this on its
-# own — no human in the loop — and escalates to a human approval ONLY when a purchase
-# would exceed what's left. Size it via DATA_BUDGET_CENTS (small => quicker demo).
-DATA_BUDGET_CENTS = int(os.environ.get("DATA_BUDGET_CENTS", "500"))
-_budget_remaining = DATA_BUDGET_CENTS
+# Auto-approve payout allowance (cents): how much the agent may pay out to creators on its
+# OWN — no human in the loop — before a payout must be held for review. It escalates ONLY
+# when a payout would cross this line. The real-world line is the IRS $600 / W-9 reporting
+# threshold; it's scaled small here so the exception fits on camera. Set via
+# PAYOUT_BUDGET_CENTS (DATA_BUDGET_CENTS still honored for back-compat).
+PAYOUT_BUDGET_CENTS = int(os.environ.get("PAYOUT_BUDGET_CENTS",
+                                         os.environ.get("DATA_BUDGET_CENTS", "500")))
+DATA_BUDGET_CENTS = PAYOUT_BUDGET_CENTS  # back-compat alias
+_budget_remaining = PAYOUT_BUDGET_CENTS
 
 
 @dataclass
@@ -120,8 +126,9 @@ def _last_record(stdout: str) -> dict:
     return data or {}
 
 
-def _request_spend_approval(ticker: str, amount_cents: int) -> bool:
-    """Escalate an OVER-BUDGET spend to the human gate via Stripe Link CLI (test mode).
+def _request_payout_approval(creator: str, amount_cents: int) -> bool:
+    """Escalate a payout that crosses the W-9/$600 line to the human gate via Stripe Link
+    CLI (test mode).
 
     `--test` => card 4242…, NO real funds. `spend-request create` returns
     `pending_approval` + an approval URL; we poll `spend-request retrieve` until the
@@ -132,19 +139,20 @@ def _request_spend_approval(ticker: str, amount_cents: int) -> bool:
         return True
     import subprocess
     timeout = int(os.environ.get("LINK_APPROVAL_TIMEOUT", "330"))
-    # Link requires --context >= 100 chars; spell out exactly what's being bought.
+    # Link requires --context >= 100 chars; spell out exactly what's being released.
     context = (
-        f"Test-mode purchase of one fresh market-data pull for {ticker} to fulfil a paid "
-        f"premium trading-signal request. One-time charge of ${amount_cents / 100:.2f}, no "
-        f"subscription and no recurring billing. Approve to release the data to the buyer."
+        f"Creator rev-share payout to {creator} for a sold premium trading signal. This "
+        f"payout would take {creator} past the IRS $600 / W-9 reporting threshold, so it "
+        f"needs operator approval before release. One-time ${amount_cents / 100:.2f} payout, "
+        f"no subscription and no recurring billing (test mode — no real funds move)."
     )
     try:
         create = subprocess.run(
             [LINK_CLI, "spend-request", "create", "--test",
-             "--merchant-name", "MarketData Feed",
-             "--merchant-url", "https://marketdata.example.com",
+             "--merchant-name", f"Creator payout {creator}",
+             "--merchant-url", "https://clockoutcapital.com/creators",
              "--context", context, "--amount", str(amount_cents),
-             "--line-item", f"name:{ticker} data,unit_amount:{amount_cents},quantity:1",
+             "--line-item", f"name:{creator} rev-share,unit_amount:{amount_cents},quantity:1",
              "--request-approval", "--format", "json"],
             capture_output=True, text=True, timeout=60, check=True)
         rec = _last_record(create.stdout)
@@ -156,7 +164,8 @@ def _request_spend_approval(ticker: str, amount_cents: int) -> bool:
         url = rec.get("approval_url")
         if url:
             import sys
-            print(f"\n  💳 APPROVE THIS SPEND (${amount_cents / 100:.2f}, TEST mode — no real money):\n"
+            print(f"\n  💳 APPROVE THIS CREATOR PAYOUT — {creator} crosses the $600/W-9 line "
+                  f"(${amount_cents / 100:.2f}, TEST mode — no real money):\n"
                   f"     {url}\n", file=sys.stderr, flush=True)
             try:
                 with open(os.path.join(os.path.dirname(__file__), "..", "approval_url.txt"), "w") as fh:
@@ -178,11 +187,11 @@ def budget_remaining() -> int:
     return _budget_remaining
 
 
-def _charge_vendor_autonomously(ticker: str, amount_cents: int) -> bool:
-    """Pay the data vendor from the authorized budget with NO human in the loop:
-    mint a fresh single-use SPT for exactly this amount and charge it once. (In
-    production this would draw on a budgeted mandate / Issuing card; in test mode each
-    autonomous draw is a fresh test-helper SPT.)"""
+def _pay_creator_autonomously(creator: str, amount_cents: int) -> bool:
+    """Release a creator payout from the auto-approve allowance with NO human in the loop.
+    (In production this is a Stripe Connect transfer to the creator; in test mode each
+    autonomous payout is modeled by charging a fresh single-use test-helper SPT — the same
+    money-movement rails, no real funds.)"""
     if DEV:
         return True
     import time
@@ -202,22 +211,22 @@ def _charge_vendor_autonomously(ticker: str, amount_cents: int) -> bool:
         return False
 
 
-def spend_on_data(ticker: str, amount_cents: int):
-    """Spend within the human-authorized autonomous budget; escalate ONLY when over.
+def pay_creator(creator: str, amount_cents: int):
+    """Release a creator's rev-share payout; escalate ONLY when it crosses the W-9 line.
 
     Returns (ok: bool, mode: str):
-      'autonomous' — paid from the budget, no human involved (the default path)
-      'approved'   — exceeded the budget, escalated, human approved (the exception)
-      'denied'     — exceeded the budget, human declined or timed out
-      'failed'     — within budget but the autonomous charge failed
+      'autonomous' — paid from the auto-approve allowance, no human involved (default path)
+      'approved'   — would cross the W-9/$600 review line, escalated, human approved
+      'denied'     — crosses the line, human declined or timed out
+      'failed'     — within the allowance but the autonomous payout failed
     """
     global _budget_remaining
     if amount_cents <= _budget_remaining:
-        if _charge_vendor_autonomously(ticker, amount_cents):
+        if _pay_creator_autonomously(creator, amount_cents):
             _budget_remaining -= amount_cents
             return True, "autonomous"
         return False, "failed"
-    # Over budget -> the human gate. The ONLY time a person is in the loop.
-    if _request_spend_approval(ticker, amount_cents):
+    # Crosses the W-9 review line -> the human gate. The ONLY time a person is in the loop.
+    if _request_payout_approval(creator, amount_cents):
         return True, "approved"
     return False, "denied"

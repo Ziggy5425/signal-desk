@@ -56,8 +56,12 @@ s = body.get("signal", {})
 out = (f"Bought {body.get('tier')} signal for {TICKER} at ${body.get('paid_cents', 0)/100:.2f} "
        f"(paid via Stripe Shared Payment Token). Grade {s.get('grade')}, score {s.get('score')}.")
 if PREMIUM:
-    out += (f" To serve it the desk bought data {body.get('spend_mode')} "
-            f"(autonomous budget left ${body.get('budget_remaining_cents', 0)/100:.2f}).")
+    out += (f" The desk paid creator {body.get('creator')} their rev-share {body.get('spend_mode')} "
+            f"(auto-payout left ${body.get('budget_remaining_cents', 0)/100:.2f}).")
+    if body.get("reasoning_tier") == "nemotron-550b":
+        out += " It judged this a hard call and paid for NVIDIA Nemotron 550B reasoning."
+    else:
+        out += " Easy call — free local read, no paid inference."
     if body.get("rationale"):
-        out += f" Nemotron analyst note: {body['rationale']}"
+        out += f" Nemotron note: {body['rationale']}"
 print(out)

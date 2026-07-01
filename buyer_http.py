@@ -2,8 +2,9 @@
 """HTTP buyer for the running Signal Desk (run_seller.py @ 127.0.0.1:8800).
 
 Mints a test-mode Shared Payment Token and pays the seller's 402, so the live
-ledger view updates. A premium buy makes the seller pay a data vendor — which
-pauses for your approval (the approval URL prints in the seller's terminal).
+ledger view updates. A premium buy makes the seller pay the signal's creator — a
+payout that crosses the $600/W-9 line pauses for your approval (URL prints in the
+seller's terminal).
 
 Usage:  .venv/bin/python buyer_http.py NVDA [--premium]
 """
@@ -50,8 +51,28 @@ spt = post("/test_helpers/shared_payment/granted_tokens", {
 })["id"]
 print(f"[2] buyer mints a Shared Payment Token -> {spt}")
 
-label = "PREMIUM (will pause for the seller's spend approval)" if PREMIUM else "standard"
+label = "PREMIUM (creator signal — may pause for a W-9 payout approval)" if PREMIUM else "standard"
 print(f"[3] buyer pays for {label} {TICKER} …")
 code, body = get({"X-Shared-Payment-Token": spt})
 print(f"[3] -> {code}")
-print(json.dumps(body, indent=2))
+
+if code == 200:
+    sig = body.get("signal", {})
+    out = {"ticker": body.get("ticker"), "tier": body.get("tier"),
+           "grade": sig.get("grade"), "score": sig.get("score"),
+           "paid_cents": body.get("paid_cents")}
+    if PREMIUM:
+        out.update({"creator": body.get("creator"),
+                    "creator_payout": body.get("spend_mode"),
+                    "auto_payout_left_cents": body.get("budget_remaining_cents"),
+                    "reasoning_tier": body.get("reasoning_tier"),
+                    "rationale": body.get("rationale")})
+    print(json.dumps(out, indent=2))
+    if PREMIUM:
+        brain = ("paid NVIDIA Nemotron 550B (hard call)"
+                 if body.get("reasoning_tier") == "nemotron-550b" else "free local read")
+        print(f"[4] earned ${body.get('paid_cents', 0) / 100:.2f} · paid creator "
+              f"{body.get('creator')} {body.get('spend_mode')} · reasoning: {brain} · "
+              f"auto-payout left ${body.get('budget_remaining_cents', 0) / 100:.2f}")
+else:
+    print(json.dumps(body, indent=2))
