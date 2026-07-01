@@ -25,4 +25,8 @@ import uvicorn  # noqa: E402
 import app      # noqa: E402  (seller/app.py)
 
 if __name__ == "__main__":
-    uvicorn.run(app.app, host="127.0.0.1", port=int(os.environ.get("SELLER_PORT", "8800")))
+    # access_log=False silences the per-request "GET /ledger 200 OK" spam from the
+    # dashboard's 2s auto-refresh, so the seller terminal stays clean on camera and the
+    # 💳 W-9 approval line stands out. Startup banner + our stderr prints still show.
+    uvicorn.run(app.app, host="127.0.0.1", port=int(os.environ.get("SELLER_PORT", "8800")),
+                access_log=False)
