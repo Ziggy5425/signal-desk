@@ -4,6 +4,8 @@
 > An AI agent that **earns, pays its creators, pays for its own intelligence, and runs its own P&L**
 > — autonomously — with a human authorizing only the one thing that legally requires it.
 
+![Signal Desk — live ledger dashboard: earn − creator payouts − compute = platform margin](assets/dashboard.png)
+
 A marketplace for trading signals. Buyer agents pay per call (earn). Each premium signal is a
 *creator's* strategy, so the desk **pays that creator their rev-share** — and it does that
 **autonomously, within an allowance a human authorized once**. On a *hard* call it also **buys its
